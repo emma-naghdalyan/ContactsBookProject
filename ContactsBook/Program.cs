@@ -1,9 +1,11 @@
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 using ContactsBook.Domain.Core;
 using ContactsBook.Domain.Interfaces;
 using ContactsBook.Domain.Services;
 using ContactsBook.Infrastructure.DataAccess;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,5 +44,25 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+Host.CreateDefaultBuilder(args)
+            .ConfigureAppConfiguration((context, config) =>
+            {
+                if (context.HostingEnvironment.IsProduction())
+                {
+                    var builtConfig = config.Build();
+
+                    var secretClient = new SecretClient(new Uri($"https://{builtConfig["keyVaultName"]}.vault.azure.net/"),
+                                      new DefaultAzureCredential());
+
+                    config.AddAzureKeyVault(secretClient, new KeyVaultSecretManager());
+                }
+            });
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    db.Database.Migrate();
+}
 
 app.Run();
